@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_folio_service
 from app.schemas.folio import FolioOut
-from app.services import folio_service
+from app.services.folio_service import FolioService
 
 router = APIRouter(prefix="/api/folios", tags=["folios"])
 
 
 @router.get("", response_model=list[FolioOut])
-def list_folios(db: Session = Depends(get_db)):
-    return folio_service.list_folios(db)
+async def list_folios(service: FolioService = Depends(get_folio_service)):
+    return await service.list_folios()
 
 
 @router.get("/{folio_id}", response_model=FolioOut)
-def get_folio(folio_id: str, db: Session = Depends(get_db)):
-    return folio_service.get_folio(db, folio_id)
+async def get_folio(folio_id: str, service: FolioService = Depends(get_folio_service)):
+    return await service.get_folio_view(folio_id)

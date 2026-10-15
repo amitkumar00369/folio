@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_order_service
 from app.models import OrderSource
 from app.schemas.order import OrderPage
-from app.services import order_service
+from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 
 @router.get("", response_model=OrderPage)
-def list_orders(
+async def list_orders(
     user_id: str | None = None,
     subscription_id: str | None = None,
     source: OrderSource | None = None,
@@ -18,10 +17,9 @@ def list_orders(
     after_id: int | None = Query(None, ge=0, description="only orders newer than this id (oldest first)"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    service: OrderService = Depends(get_order_service),
 ):
-    orders = order_service.list_orders(
-        db,
+    orders = await service.list_orders(
         user_id=user_id,
         subscription_id=subscription_id,
         source=source,

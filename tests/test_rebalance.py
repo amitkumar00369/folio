@@ -1,16 +1,13 @@
 import asyncio
 
-from app.db.database import SessionLocal
-from app.schemas.rebalance import RebalanceRequest
-from app.services import rebalance_service
 from app.services.broker_service import MockBroker
 from app.services.errors import BrokerError
-from tests.conftest import base_quantities, orders_for, subscribe, wait_for_job
+from tests.conftest import base_quantities, orders_for, subscribe, wait_for_job, trigger_job
 
 SWAP = {"folio_id": "folio-1", "outgoing_ticker": "RELIANCE", "incoming_ticker": "IDEA"}
 
 
-def positions(client, sub_id: str) -> dict[str, int]:
+def positions(client, sub_id: str):
     sub = client.get(f"/api/subscriptions/{sub_id}").json()
     return {p["ticker"]: p["quantity"] for p in sub["positions"]}
 
@@ -142,9 +139,7 @@ def test_new_subscriber_after_swap_buys_new_basket(client):
 def test_exit_before_cascade_runs_is_skipped(client):
     sub_id = subscribe(client, "user-101", 3)["subscription"]["id"]
 
-    # create the job without handing it to the worker
-    with SessionLocal() as db:
-        job = rebalance_service.trigger_rebalance(db, RebalanceRequest(**SWAP))
+    job = trigger_job(**SWAP)
 
     sells = client.post(f"/api/subscriptions/{sub_id}/exit").json()["orders"]
     assert "RELIANCE" in {o["ticker"] for o in sells}
@@ -163,10 +158,10 @@ class FailOnTicker(MockBroker):
         self.ticker = ticker
         self.enabled = True
 
-    def place_order(self, trade):
+    async def place_order(self, trade):
         if self.enabled and trade.ticker == self.ticker:
             raise BrokerError(f"no liquidity in {trade.ticker}")
-        return super().place_order(trade)
+        return await super().place_order(trade)
 
 
 def test_failed_buy_is_recorded_and_retry_finishes_it(client, use_broker):

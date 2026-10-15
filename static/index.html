@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio Trading Platform</title>
+<style>
+:root {
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --ink: #18202c;
+  --muted: #667085;
+  --line: #e3e7ee;
+  --accent: #2456c8;
+  --accent-soft: #e9f0fd;
+  --buy: #157a46;
+  --buy-soft: #e5f5ec;
+  --sell: #b4322a;
+  --sell-soft: #fbe9e7;
+  --warn-soft: #fff4dc;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141b;
+    --panel: #171e28;
+    --ink: #e6ebf2;
+    --muted: #94a0b2;
+    --line: #283242;
+    --accent: #6f9bff;
+    --accent-soft: #1d2a44;
+    --buy: #4cc98a;
+    --buy-soft: #15301f;
+    --sell: #ff7b6e;
+    --sell-soft: #3a1b18;
+    --warn-soft: #3a2c10;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { margin: 0; font-size: 17px; }
+header h1 span { color: var(--accent); }
+.status { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.ok { background: var(--buy); }
+.dot.bad { background: var(--sell); }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.panel h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+.panel h3 { margin: 18px 0 8px; font-size: 13px; }
+.wide { grid-column: 1 / -1; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+input:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 10px; }
+button { border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; background: var(--accent); color: #fff; }
+button:disabled { opacity: .55; cursor: wait; }
+button.danger { background: var(--sell-soft); color: var(--sell); padding: 5px 12px; }
+.actions { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+.preview { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+.chip b { color: var(--accent); font-weight: 600; }
+.msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; display: none; }
+.msg.show { display: block; }
+.msg.ok { background: var(--buy-soft); color: var(--buy); }
+.msg.err { background: var(--sell-soft); color: var(--sell); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.item-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+.job { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: none; }
+.job.show { display: block; }
+.swap { font-family: var(--mono); font-size: 15px; font-weight: 600; margin: 4px 0; }
+.bar { height: 8px; border-radius: 99px; background: var(--bg); overflow: hidden; margin: 8px 0 4px; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.small { font-size: 12px; color: var(--muted); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+.feed-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+.feed-head h2 { margin: 0; }
+.toggle { display: flex; gap: 6px; align-items: center; margin: 0; }
+.toggle input { width: auto; }
+.feed { max-height: 420px; overflow: auto; }
+.feed td { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.act { font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.act.BUY { background: var(--buy-soft); color: var(--buy); }
+.act.SELL { background: var(--sell-soft); color: var(--sell); }
+.src { color: var(--muted); }
+tr.fresh td { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--warn-soft); } to { background: transparent; } }
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; padding: 14px 16px; }
+  .row3 { grid-template-columns: 1fr 1fr; }
+  header { padding: 12px 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Folio <span>Trading</span> Platform</h1>
+  <div class="status"><span class="dot" id="health-dot"></span><span id="health-text">connecting…</span></div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>User</h2>
+    <div class="row">
+      <div>
+        <label for="user-id">User ID</label>
+        <input id="user-id" value="user-101" autocomplete="off">
+      </div>
+      <div>
+        <label for="multiplier">Multiplier</label>
+        <input id="multiplier" type="number" min="1" max="100" value="3">
+      </div>
+    </div>
+    <label for="user-folio">Folio</label>
+    <select id="user-folio"></select>
+    <div class="preview" id="user-preview"></div>
+    <div class="actions">
+      <button id="subscribe-btn">Subscribe</button>
+      <span class="small" id="order-count"></span>
+    </div>
+    <div class="msg" id="user-msg"></div>
+    <h3>Active folios</h3>
+    <div class="list" id="active-list"><div class="empty">No active subscriptions.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Admin rebalance</h2>
+    <label for="admin-folio">Folio</label>
+    <select id="admin-folio"></select>
+    <div class="row3">
+      <div>
+        <label for="outgoing">Existing stock</label>
+        <select id="outgoing"></select>
+      </div>
+      <div>
+        <label for="incoming">Replace with</label>
+        <input id="incoming" placeholder="IDEA" autocomplete="off">
+      </div>
+      <div>
+        <label for="base-qty">New base qty</label>
+        <input id="base-qty" type="number" min="1" placeholder="same">
+      </div>
+    </div>
+    <div class="actions">
+      <button id="rebalance-btn">Trigger rebalance</button>
+      <span class="small" id="subscriber-count"></span>
+    </div>
+    <div class="msg" id="admin-msg"></div>
+    <div class="job" id="job-box">
+      <div class="small">Rebalance triggered successfully.</div>
+      <div class="swap" id="job-swap"></div>
+      <div class="small" id="job-queued"></div>
+      <div class="bar"><div id="job-bar"></div></div>
+      <div class="small" id="job-status"></div>
+    </div>
+    <h3>Users</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>User</th><th>Active / total</th><th>Folios</th></tr></thead>
+        <tbody id="users-body"><tr><td colspan="3" class="empty">No users yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel wide">
+    <div class="feed-head">
+      <h2>Live order feed</h2>
+      <label class="toggle"><input type="checkbox" id="only-user"> only this user</label>
+    </div>
+    <div class="feed">
+      <table>
+        <thead><tr><th>#</th><th>Time</th><th>User</th><th>Action</th><th>Ticker</th><th>Qty</th><th>Source</th><th>Status</th></tr></thead>
+        <tbody id="feed-body"><tr><td colspan="8" class="empty">Waiting for orders…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const state = { folios: [], lastOrderId: 0, feed: [], jobTimer: null };
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = Array.isArray(body.detail) ? body.detail.map((d) => d.msg).join(", ") : body.detail;
+    throw new Error(detail || `${res.status} ${res.statusText}`);
+  }
+  return body;
+}
+
+function showMsg(id, text, kind) {
+  const box = $(id);
+  box.textContent = text;
+  box.className = `msg show ${kind}`;
+}
+
+function hideMsg(id) {
+  $(id).className = "msg";
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function userId() {
+  return $("user-id").value.trim();
+}
+
+function folioById(id) {
+  return state.folios.find((f) => f.id === id);
+}
+
+async function loadHealth() {
+  try {
+    const h = await api("/health");
+    $("health-dot").className = "dot ok";
+    $("health-text").textContent = `online · queue: ${h.queue_backend}`;
+  } catch {
+    $("health-dot").className = "dot bad";
+    $("health-text").textContent = "offline";
+  }
+}
+
+async function loadFolios() {
+  state.folios = await api("/api/folios");
+  for (const id of ["user-folio", "admin-folio"]) {
+    const select = $(id);
+    const keep = select.value;
+    select.replaceChildren(...state.folios.map((f) => el("option", { value: f.id }, `${f.name} (${f.id})`)));
+    if (keep && folioById(keep)) select.value = keep;
+  }
+  renderUserPreview();
+  renderOutgoing();
+}
+
+function renderUserPreview() {
+  const folio = folioById($("user-folio").value);
+  if (!folio) return;
+  const mult = Math.max(0, parseInt($("multiplier").value, 10) || 0);
+  $("user-preview").replaceChildren(
+    ...folio.stocks.map((s) => el("span", { class: "chip" }, `${s.ticker} ${s.base_quantity}×${mult} = `, el("b", {}, s.base_quantity * mult)))
+  );
+  $("order-count").textContent = `${folio.stocks.length} BUY orders`;
+}
+
+function updateBasePlaceholder() {
+  const folio = folioById($("admin-folio").value);
+  const stock = folio && folio.stocks.find((s) => s.ticker === $("outgoing").value);
+  $("base-qty").placeholder = stock ? `${stock.base_quantity}` : "same";
+}
+
+function renderOutgoing() {
+  const folio = folioById($("admin-folio").value);
+  if (!folio) return;
+  const keep = $("outgoing").value;
+  $("outgoing").replaceChildren(...folio.stocks.map((s) => el("option", { value: s.ticker }, `${s.ticker} (base ${s.base_quantity})`)));
+  if (keep && folio.stocks.some((s) => s.ticker === keep)) $("outgoing").value = keep;
+  updateBasePlaceholder();
+  loadSubscriberCount();
+}
+
+async function loadSubscriberCount() {
+  const folioId = $("admin-folio").value;
+  if (!folioId) return;
+  try {
+    const subs = await api(`/api/subscriptions?folio_id=${encodeURIComponent(folioId)}&active=true&limit=1000`);
+    $("subscriber-count").textContent = `${subs.length} active subscriber${subs.length === 1 ? "" : "s"}`;
+  } catch {
+    $("subscriber-count").textContent = "";
+  }
+}
+
+async function loadActive() {
+  const uid = userId();
+  const list = $("active-list");
+  if (!uid) {
+    list.replaceChildren(el("div", { class: "empty" }, "Enter a user ID."));
+    return;
+  }
+  const subs = await api(`/api/users/${encodeURIComponent(uid)}/subscriptions?active=true`);
+  if (!subs.length) {
+    list.replaceChildren(el("div", { class: "empty" }, "No active subscriptions."));
+    return;
+  }
+  list.replaceChildren(
+    ...subs.map((s) =>
+      el("div", { class: "item" },
+        el("div", { class: "item-head" },
+          el("div", {}, el("strong", {}, s.folio_name), " ", el("span", { class: "badge" }, `${s.multiplier}x`)),
+          el("button", { class: "danger", onclick: () => exitSubscription(s.id, s.folio_name) }, "Exit")
+        ),
+        el("div", { class: "preview" }, ...s.positions.map((p) => el("span", { class: "chip" }, `${p.ticker} `, el("b", {}, p.quantity))))
+      )
+    )
+  );
+}
+
+async function refreshAfterTrade() {
+  await Promise.all([loadActive(), loadUsers(), loadSubscriberCount(), pollOrders()]);
+}
+
+async function subscribe() {
+  const btn = $("subscribe-btn");
+  hideMsg("user-msg");
+  btn.disabled = true;
+  try {
+    const body = { user_id: userId(), folio_id: $("user-folio").value, multiplier: parseInt($("multiplier").value, 10) };
+    const res = await api("/api/subscriptions", { method: "POST", body: JSON.stringify(body) });
+    showMsg("user-msg", `Subscribed to ${res.subscription.folio_name} at ${res.subscription.multiplier}x · ${res.orders.length} BUY orders executed`, "ok");
+    await refreshAfterTrade();
+  } catch (e) {
+    showMsg("user-msg", e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function exitSubscription(id, name) {
+  hideMsg("user-msg");
+  try {
+    const res = await api(`/api/subscriptions/${encodeURIComponent(id)}/exit`, { method: "POST" });
+    showMsg("user-msg", `Exited ${name} · ${res.orders.length} SELL orders executed`, "ok");
+    await refreshAfterTrade();
+  } catch (e) {
+    showMsg("user-msg", e.message, "err");
+  }
+}
+
+async function triggerRebalance() {
+  const btn = $("rebalance-btn");
+  hideMsg("admin-msg");
+  const body = {
+    folio_id: $("admin-folio").value,
+    outgoing_ticker: $("outgoing").value,
+    incoming_ticker: $("incoming").value.trim(),
+  };
+  const qty = parseInt($("base-qty").value, 10);
+  if (qty) body.incoming_base_quantity = qty;
+  btn.disabled = true;
+  try {
+    const started = performance.now();
+    const res = await api("/api/admin/rebalance", { method: "POST", body: JSON.stringify(body) });
+    const ms = Math.round(performance.now() - started);
+    $("job-box").className = "job show";
+    $("job-bar").style.width = "0";
+    $("job-swap").textContent = `${res.outgoing_ticker} → ${res.incoming_ticker} (base ${res.incoming_base_quantity})`;
+    $("job-queued").textContent = `Active subscribers queued: ${res.subscribers_queued} · API answered in ${ms} ms`;
+    $("incoming").value = "";
+    $("base-qty").value = "";
+    await loadFolios();
+    watchJob(res.job_id, res.subscribers_queued);
+  } catch (e) {
+    showMsg("admin-msg", e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function watchJob(jobId, total) {
+  clearTimeout(state.jobTimer);
+  const tick = async () => {
+    try {
+      const job = await api(`/api/admin/rebalance/${encodeURIComponent(jobId)}`);
+      const p = job.progress;
+      const finished = (p.DONE || 0) + (p.SKIPPED || 0) + (p.FAILED || 0);
+      $("job-bar").style.width = `${total ? Math.round((finished / total) * 100) : 100}%`;
+      const parts = [job.status, `done ${p.DONE || 0}`, `pending ${p.PENDING || 0}`];
+      if (p.SKIPPED) parts.push(`skipped ${p.SKIPPED}`);
+      if (p.FAILED) parts.push(`failed ${p.FAILED}`);
+      if (job.duration_ms !== null) parts.push(`${job.duration_ms} ms`);
+      $("job-status").textContent = parts.join(" · ");
+      if (job.status === "QUEUED" || job.status === "RUNNING") {
+        state.jobTimer = setTimeout(tick, 600);
+      } else {
+        await Promise.all([loadActive(), loadUsers(), pollOrders()]);
+      }
+    } catch (e) {
+      $("job-status").textContent = e.message;
+    }
+  };
+  tick();
+}
+
+async function loadUsers() {
+  const users = await api("/api/admin/users");
+  const body = $("users-body");
+  if (!users.length) {
+    body.replaceChildren(el("tr", {}, el("td", { colspan: 3, class: "empty" }, "No users yet.")));
+    return;
+  }
+  body.replaceChildren(
+    ...users.map((u) =>
+      el("tr", { class: "click", title: "Open in user panel", onclick: () => selectUser(u.user_id) },
+        el("td", {}, u.user_id),
+        el("td", {}, `${u.active_subscriptions} / ${u.total_subscriptions}`),
+        el("td", {}, u.active_folios.join(", ") || "—")
+      )
+    )
+  );
+}
+
+function selectUser(id) {
+  $("user-id").value = id;
+  loadActive().catch(() => {});
+  renderFeed();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function orderRow(o, fresh) {
+  return el("tr", { class: fresh ? "fresh" : "" },
+    el("td", {}, o.id),
+    el("td", {}, new Date(o.timestamp).toLocaleTimeString()),
+    el("td", {}, o.user_id),
+    el("td", {}, el("span", { class: `act ${o.action}` }, o.action)),
+    el("td", {}, o.ticker),
+    el("td", {}, o.quantity),
+    el("td", { class: "src" }, o.source),
+    el("td", { class: "src" }, o.status)
+  );
+}
+
+function renderFeed(freshIds = new Set()) {
+  const only = $("only-user").checked ? userId() : null;
+  const rows = state.feed.filter((o) => !only || o.user_id === only);
+  const body = $("feed-body");
+  if (!rows.length) {
+    body.replaceChildren(el("tr", {}, el("td", { colspan: 8, class: "empty" }, "Waiting for orders…")));
+    return;
+  }
+  body.replaceChildren(...rows.map((o) => orderRow(o, freshIds.has(o.id))));
+}
+
+async function loadInitialOrders() {
+  const page = await api("/api/orders?limit=100");
+  state.feed = page.items;
+  state.lastOrderId = page.items.reduce((max, o) => Math.max(max, o.id), 0);
+  renderFeed();
+}
+
+async function pollOrders() {
+  try {
+    const page = await api(`/api/orders?after_id=${state.lastOrderId}&limit=500`);
+    if (!page.items.length) return;
+    state.lastOrderId = page.items.reduce((max, o) => Math.max(max, o.id), state.lastOrderId);
+    const newest = [...page.items].reverse();
+    state.feed = [...newest, ...state.feed].slice(0, 300);
+    renderFeed(new Set(newest.map((o) => o.id)));
+  } catch {}
+}
+
+$("subscribe-btn").addEventListener("click", subscribe);
+$("rebalance-btn").addEventListener("click", triggerRebalance);
+$("user-folio").addEventListener("change", renderUserPreview);
+$("multiplier").addEventListener("input", renderUserPreview);
+$("admin-folio").addEventListener("change", renderOutgoing);
+$("outgoing").addEventListener("change", updateBasePlaceholder);
+$("user-id").addEventListener("input", debounce(() => { loadActive().catch(() => {}); renderFeed(); }, 300));
+$("only-user").addEventListener("change", () => renderFeed());
+$("incoming").addEventListener("keydown", (e) => { if (e.key === "Enter") triggerRebalance(); });
+
+(async () => {
+  await loadHealth();
+  try {
+    await loadFolios();
+    await Promise.all([loadActive(), loadUsers(), loadInitialOrders()]);
+  } catch (e) {
+    showMsg("user-msg", e.message, "err");
+  }
+  setInterval(pollOrders, 1500);
+  setInterval(loadHealth, 10000);
+})();
+</script>
+</body>
+</html>

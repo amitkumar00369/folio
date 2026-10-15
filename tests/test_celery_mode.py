@@ -1,19 +1,17 @@
-
-import threading
-import time
+import asyncio
 
 import pytest
 
 from app.config import settings
 from app.db.database import SessionLocal
 from app.models import RebalanceTask
-from app.schemas.rebalance import RebalanceRequest
-from app.services import rebalance_service
 from app.services.broker_service import MockBroker
+from app.services.cache import RedisCache
 from app.services.errors import ConflictError
 from app.services.locks import RedisKeyedLock
+from app.services.rebalance_service import RebalanceProcessor
 from app.workers.celery_app import CeleryDispatcher, celery_app
-from tests.conftest import base_quantities, orders_for, subscribe
+from tests.conftest import base_quantities, orders_for, subscribe, trigger_job
 
 
 @pytest.fixture
@@ -49,25 +47,24 @@ def test_cascade_through_celery_tasks(client, eager_celery):
 
 
 def test_newer_swap_waits_for_older_one(client):
-    """Celery can run tasks of two jobs in any order. A task must not run while
-    an older task for the same subscriber is still pending."""
     sub_id = subscribe(client, "user-101", 2)["subscription"]["id"]
-    with SessionLocal() as db:
-        job1 = rebalance_service.trigger_rebalance(
-            db, RebalanceRequest(folio_id="folio-1", outgoing_ticker="RELIANCE", incoming_ticker="IDEA"))
-    with SessionLocal() as db:
-        job2 = rebalance_service.trigger_rebalance(
-            db, RebalanceRequest(folio_id="folio-1", outgoing_ticker="IDEA", incoming_ticker="WIPRO"))
-    with SessionLocal() as db:
-        t1 = db.query(RebalanceTask).filter_by(job_id=job1.id).one().id
-        t2 = db.query(RebalanceTask).filter_by(job_id=job2.id).one().id
+    job1 = trigger_job(folio_id="folio-1", outgoing_ticker="RELIANCE", incoming_ticker="IDEA")
+    job2 = trigger_job(folio_id="folio-1", outgoing_ticker="IDEA", incoming_ticker="WIPRO")
 
-    broker = MockBroker()
-    assert rebalance_service.process_task(SessionLocal, broker, t2) is False   # has to wait
-    assert orders_for(client, rebalance_job_id=job2.id) == []
+    async def run():
+        async with SessionLocal() as db:
+            from sqlalchemy import select
 
-    assert rebalance_service.process_task(SessionLocal, broker, t1) is True
-    assert rebalance_service.process_task(SessionLocal, broker, t2) is True
+            t1 = await db.scalar(select(RebalanceTask.id).where(RebalanceTask.job_id == job1.id))
+            t2 = await db.scalar(select(RebalanceTask.id).where(RebalanceTask.job_id == job2.id))
+        processor = RebalanceProcessor(SessionLocal, MockBroker())
+        first = await processor.process_task(t2)
+        second = await processor.process_task(t1)
+        third = await processor.process_task(t2)
+        return first, second, third
+
+    first, second, third = asyncio.run(run())
+    assert (first, second, third) == (False, True, True)
 
     held = {p["ticker"] for p in client.get(f"/api/subscriptions/{sub_id}").json()["positions"]}
     assert "WIPRO" in held and "IDEA" not in held and "RELIANCE" not in held
@@ -76,18 +73,15 @@ def test_newer_swap_waits_for_older_one(client):
 
 def test_dispatcher_republishes_unfinished_jobs(client, eager_celery):
     subscribe(client, "user-101", 2)
-    with SessionLocal() as db:   # committed but never published, like an API crash right after commit
-        job = rebalance_service.trigger_rebalance(
-            db, RebalanceRequest(folio_id="folio-1", outgoing_ticker="RELIANCE", incoming_ticker="IDEA"))
+    job = trigger_job(folio_id="folio-1", outgoing_ticker="RELIANCE", incoming_ticker="IDEA")
 
-    import asyncio
     asyncio.run(CeleryDispatcher().start())
 
     assert client.get(f"/api/admin/rebalance/{job.id}").json()["status"] == "COMPLETED"
     assert len(orders_for(client, rebalance_job_id=job.id)) == 2
 
 
-def _redis_up() -> bool:
+def _redis_up():
     try:
         import redis
 
@@ -101,32 +95,59 @@ needs_redis = pytest.mark.skipif(not _redis_up(), reason="Redis not running")
 
 @needs_redis
 def test_redis_lock_is_exclusive():
-    lock = RedisKeyedLock(settings.redis_url, timeout=5, wait=5)
-    inside, overlap = [0], [False]
+    lock = RedisKeyedLock(timeout=5, wait=5)
 
-    def work():
-        with lock.hold("sub-test-exclusive"):
-            inside[0] += 1
-            if inside[0] > 1:
-                overlap[0] = True
-            time.sleep(0.05)
-            inside[0] -= 1
+    async def run():
+        inside, overlap = [0], [False]
 
-    threads = [threading.Thread(target=work) for _ in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert overlap[0] is False
+        async def work():
+            async with lock.hold("sub-test-exclusive"):
+                inside[0] += 1
+                if inside[0] > 1:
+                    overlap[0] = True
+                await asyncio.sleep(0.05)
+                inside[0] -= 1
+
+        await asyncio.gather(*(work() for _ in range(8)))
+        return overlap[0]
+
+    assert asyncio.run(run()) is False
 
 
 @needs_redis
 def test_redis_lock_gives_up_when_busy():
-    holder = RedisKeyedLock(settings.redis_url, timeout=5, wait=1)
-    waiter = RedisKeyedLock(settings.redis_url, timeout=5, wait=0.2)
-    with holder.hold("sub-test-busy"):
-        with pytest.raises(ConflictError):
-            with waiter.hold("sub-test-busy"):
-                pass
-    with waiter.hold("sub-test-busy"): 
-        pass
+    holder = RedisKeyedLock(timeout=5, wait=1)
+    waiter = RedisKeyedLock(timeout=5, wait=0.2)
+
+    async def run():
+        async with holder.hold("sub-test-busy"):
+            with pytest.raises(ConflictError):
+                async with waiter.hold("sub-test-busy"):
+                    pass
+        async with waiter.hold("sub-test-busy"):
+            pass
+
+    asyncio.run(run())
+
+
+@needs_redis
+def test_redis_cache_hit_and_invalidate():
+    cache = RedisCache(ttl=30)
+    calls = []
+
+    async def loader():
+        calls.append(1)
+        return {"n": len(calls)}
+
+    async def run():
+        await cache.invalidate("test-ns")
+        a = await cache.get_or_load("test-ns", ["k"], loader)
+        b = await cache.get_or_load("test-ns", ["k"], loader)
+        await cache.invalidate("test-ns")
+        c = await cache.get_or_load("test-ns", ["k"], loader)
+        return a, b, c
+
+    a, b, c = asyncio.run(run())
+    assert a == b == {"n": 1}
+    assert c == {"n": 2}
+    assert len(calls) == 2

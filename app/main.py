@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, folios, orders, users
 from app.config import settings
@@ -15,12 +17,14 @@ from app.workers.rebalance_worker import RebalanceWorker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    with SessionLocal() as db:
-        seed_folios(db)
+    await init_db()
+    async with SessionLocal() as db:
+        await seed_folios(db)
 
     if settings.use_celery:
         from app.workers.celery_app import CeleryDispatcher
@@ -67,11 +71,14 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     return JSONResponse(status_code=400, content={"detail": summary, "errors": errors})
 
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 @app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse("/docs")
+async def ui():
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health", tags=["meta"])
-def health():
+async def health():
     return {"status": "ok", "queue_backend": settings.queue_backend}

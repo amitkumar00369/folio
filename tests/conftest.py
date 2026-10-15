@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 import time
@@ -12,16 +13,21 @@ os.environ["BROKER_MAX_ATTEMPTS"] = "2"
 import pytest  
 from fastapi.testclient import TestClient  
 
-from app.db.database import Base, engine  
-from app.main import app  # noqa: E402
+from app.db.database import Base, SessionLocal, engine  
+from app.main import app
 from app.services.broker_service import MockBroker, get_broker  
 
 TERMINAL = {"COMPLETED", "COMPLETED_WITH_ERRORS"}
 
 
+async def drop_all():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
 @pytest.fixture
 def client():
-    Base.metadata.drop_all(engine)
+    asyncio.run(drop_all())
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -63,3 +69,13 @@ def wait_for_job(client, job_id: str, timeout: float = 10.0):
 
 def orders_for(client, **params):
     return client.get("/api/orders", params={"limit": 1000, **params}).json()["items"]
+
+def trigger_job(**swap):
+    from app.schemas.rebalance import RebalanceRequest
+    from app.services.rebalance_service import RebalanceService
+
+    async def run():
+        async with SessionLocal() as db:
+            return await RebalanceService(db).trigger(RebalanceRequest(**swap))
+
+    return asyncio.run(run())

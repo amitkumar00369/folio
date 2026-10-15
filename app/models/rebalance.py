@@ -42,7 +42,7 @@ class RebalanceTask(Base):
     job_id: Mapped[str] = mapped_column(ForeignKey("rebalance_jobs.id"), index=True)
     subscription_id: Mapped[str] = mapped_column(ForeignKey("subscriptions.id"))
     user_id: Mapped[str] = mapped_column(String(64))
-    multiplier: Mapped[int] = mapped_column(Integer)  # snapshot, for auditing
+    multiplier: Mapped[int] = mapped_column(Integer)
 
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, native_enum=False), default=TaskStatus.PENDING, index=True
@@ -53,5 +53,5 @@ class RebalanceTask(Base):
         UTCDateTime, default=utcnow, onupdate=utcnow
     )
 
-    job: Mapped[RebalanceJob] = relationship(back_populates="tasks")
-    subscription: Mapped[Subscription] = relationship()
+    job: Mapped[RebalanceJob] = relationship(back_populates="tasks", lazy="selectin")
+    subscription: Mapped[Subscription] = relationship(lazy="selectin")

@@ -29,11 +29,12 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     exited_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
-    folio: Mapped[Folio] = relationship()
+    folio: Mapped[Folio] = relationship(lazy="selectin")
     positions: Mapped[list["Position"]] = relationship(
         back_populates="subscription",
         cascade="all, delete-orphan",
         order_by="Position.id",
+        lazy="selectin",
     )
 
     @property

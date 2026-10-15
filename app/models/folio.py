@@ -17,13 +17,11 @@ class Folio(Base):
         back_populates="folio",
         cascade="all, delete-orphan",
         order_by="FolioStock.slot",
+        lazy="selectin",
     )
 
     def find_stock(self, ticker: str):
         return next((s for s in self.stocks if s.ticker == ticker), None)
-
-
-
 
     @property
     def tickers(self):

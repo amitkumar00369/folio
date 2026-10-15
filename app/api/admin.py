@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import JobQueue, get_db, get_worker
+from app.api.deps import JobQueue, get_rebalance_service, get_subscription_service, get_worker
 from app.schemas.rebalance import (
     RebalanceAccepted,
     RebalanceJobDetail,
     RebalanceJobOut,
     RebalanceRequest,
 )
-from app.services import rebalance_service
+from app.schemas.subscription import UserSummary
+from app.services.rebalance_service import RebalanceService
+from app.services.subscription_service import SubscriptionService
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -19,14 +20,14 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
     status_code=status.HTTP_202_ACCEPTED,
     summary="Swap a stock in a folio and cascade it to all active subscribers",
 )
-def trigger_rebalance(
+async def trigger_rebalance(
     body: RebalanceRequest,
-    db: Session = Depends(get_db),
+    service: RebalanceService = Depends(get_rebalance_service),
     worker: JobQueue = Depends(get_worker),
 ):
-    job = rebalance_service.trigger_rebalance(db, body)
+    job = await service.trigger(body)
     if job.total_tasks:
-        worker.enqueue(job.id)
+        await worker.enqueue(job.id)
 
     return RebalanceAccepted(
         job_id=job.id,
@@ -40,23 +41,30 @@ def trigger_rebalance(
 
 
 @router.get("/rebalance", response_model=list[RebalanceJobOut])
-def list_rebalance_jobs(folio_id: str | None = None, db: Session = Depends(get_db)):
-    return [rebalance_service.job_summary(db, j) for j in rebalance_service.list_jobs(db, folio_id)]
+async def list_rebalance_jobs(folio_id: str | None = None, service: RebalanceService = Depends(get_rebalance_service)):
+    return [await service.summary(job) for job in await service.list_jobs(folio_id)]
 
 
 @router.get("/rebalance/{job_id}", response_model=RebalanceJobDetail)
-def get_rebalance_job(job_id: str, db: Session = Depends(get_db)):
-    job = rebalance_service.get_job(db, job_id)
-    return {**rebalance_service.job_summary(db, job), "tasks": job.tasks}
+async def get_rebalance_job(job_id: str, service: RebalanceService = Depends(get_rebalance_service)):
+    job = await service.get_job(job_id, with_tasks=True)
+    return {**await service.summary(job), "tasks": job.tasks}
 
 
 @router.post("/rebalance/{job_id}/retry", response_model=RebalanceJobOut)
-def retry_rebalance_job(
+async def retry_rebalance_job(
     job_id: str,
-    db: Session = Depends(get_db),
+    service: RebalanceService = Depends(get_rebalance_service),
     worker: JobQueue = Depends(get_worker),
 ):
+    if await service.retry_failed(job_id):
+        await worker.enqueue(job_id)
+    return await service.summary(await service.get_job(job_id))
 
-    if rebalance_service.retry_failed(db, job_id):
-        worker.enqueue(job_id)
-    return rebalance_service.job_summary(db, rebalance_service.get_job(db, job_id))
+
+@router.get("/users", response_model=list[UserSummary], summary="All users who have subscribed")
+async def list_users(
+    active: bool = Query(False, description="true = only users with at least one active subscription"),
+    service: SubscriptionService = Depends(get_subscription_service),
+):
+    return await service.list_users(active_only=active)

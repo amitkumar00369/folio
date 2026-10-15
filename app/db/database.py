@@ -1,8 +1,7 @@
-from collections.abc import Iterator
-
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -11,40 +10,47 @@ class Base(DeclarativeBase):
     pass
 
 
-def _build_engine(url: str) -> Engine:
+def async_url(url: str):
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+def build_engine(url: str):
+    url = async_url(url)
     if not url.startswith("sqlite"):
-        return create_engine(url, pool_pre_ping=True)
+        return create_async_engine(url, pool_pre_ping=True)
 
-    engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
+    engine = create_async_engine(url, connect_args={"timeout": 30}, poolclass=NullPool)
 
-    @event.listens_for(engine, "connect")
-    def _on_connect(dbapi_conn, _record):
+    @event.listens_for(engine.sync_engine, "connect")
+    def on_connect(dbapi_conn, _record):
         dbapi_conn.isolation_level = None
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA foreign_keys=ON")
         cur.close()
 
-    @event.listens_for(engine, "begin")
-    def _on_begin(conn):
+    @event.listens_for(engine.sync_engine, "begin")
+    def on_begin(conn):
         conn.exec_driver_sql("BEGIN IMMEDIATE")
 
     return engine
 
 
-engine = _build_engine(settings.database_url)
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+engine = build_engine(settings.database_url)
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-def get_db() -> Iterator[Session]:
-    db = SessionLocal()
-    try:
+async def get_db():
+    async with SessionLocal() as db:
         yield db
-    finally:
-        db.close()
 
 
-def init_db() -> None:
-    import app.models  
+async def init_db():
+    import app.models
 
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

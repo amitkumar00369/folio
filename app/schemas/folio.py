@@ -10,7 +10,7 @@ class StockIn(BaseModel):
 
     @field_validator("ticker")
     @classmethod
-    def _ticker(cls, v: str) -> str:
+    def _ticker(cls, v: str):
         return normalize_ticker(v)
 
 

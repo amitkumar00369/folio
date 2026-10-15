@@ -2,16 +2,18 @@ import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./folio.db")
+    database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./folio.db")
 
     queue_backend: str = os.getenv("QUEUE_BACKEND", "inprocess").lower()
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/1")
     celery_queue: str = os.getenv("CELERY_QUEUE", "folio")
+    cache_ttl_seconds: int = int(os.getenv("CACHE_TTL_SECONDS", "60"))
 
     rebalance_concurrency: int = int(os.getenv("REBALANCE_CONCURRENCY", "4"))
 
@@ -22,8 +24,12 @@ class Settings:
     max_multiplier: int = 100
 
     @property
-    def use_celery(self) -> bool:
+    def use_celery(self):
         return self.queue_backend == "celery"
+
+    @property
+    def use_cache(self):
+        return self.use_celery and self.cache_ttl_seconds > 0
 
 
 settings = Settings()

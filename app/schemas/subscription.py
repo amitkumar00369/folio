@@ -13,7 +13,7 @@ class SubscribeRequest(BaseModel):
 
     @field_validator("user_id", "folio_id")
     @classmethod
-    def strip_and_require(cls, v: str) -> str:
+    def strip_and_require(cls, v: str):
         v = v.strip()
         if not v:
             raise ValueError("must not be blank")
@@ -44,3 +44,12 @@ class SubscriptionOut(BaseModel):
 class SubscriptionWithOrders(BaseModel):
     subscription: SubscriptionOut
     orders: list[OrderOut]
+
+
+
+class UserSummary(BaseModel):
+    user_id: str
+    total_subscriptions: int
+    active_subscriptions: int
+    active_folios: list[str]
+    first_subscribed_at: datetime

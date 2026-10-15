@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Folio, FolioStock
 from app.schemas.folio import FolioIn
@@ -8,7 +8,7 @@ from app.schemas.folio import FolioIn
 log = logging.getLogger(__name__)
 
 
-SEED_FOLIOS= [
+SEED_FOLIOS = [
     {
         "id": "folio-1",
         "name": "Alpha Growth",
@@ -75,8 +75,7 @@ SEED_FOLIOS= [
 ]
 
 
-def seed_folios(db: Session):
-
+async def seed_folios(db: AsyncSession):
     created = 0
     for raw in SEED_FOLIOS:
         spec = FolioIn(
@@ -84,9 +83,7 @@ def seed_folios(db: Session):
             name=raw["name"],
             stocks=[{"ticker": t, "base_quantity": q} for t, q in raw["stocks"]],
         )
-        #  we checked inside the db if 
-        if db.get(Folio, spec.id):
-            print(spec.id)
+        if await db.get(Folio, spec.id):
             continue
         db.add(
             Folio(
@@ -99,7 +96,7 @@ def seed_folios(db: Session):
             )
         )
         created += 1
-    db.commit()
+    await db.commit()
     if created:
         log.info("seeded %s folios", created)
     return created

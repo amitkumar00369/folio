@@ -32,4 +32,4 @@ class Order(Base):
     )
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime)
 
-    subscription: Mapped[Subscription | None] = relationship()
+    subscription: Mapped[Subscription | None] = relationship(lazy="noload")
