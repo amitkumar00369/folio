@@ -1,0 +1,2 @@
+celery -A app.workers.celery_app worker --pool=threads --concurrency=4 --loglevel=info
+uvicorn app.main:app --reload
