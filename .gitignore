@@ -16,3 +16,5 @@ htmlcov/
 .vscode/
 .DS_Store
 .env
+folio.db
+.folio.db
