@@ -16,6 +16,7 @@ from app.services.rebalance_service import RebalanceProcessor
 log = logging.getLogger(__name__)
 
 celery_app = Celery("folio", broker=settings.redis_url)
+#  here we initilalized my celary i used  redis broker and app name is folio
 celery_app.conf.update(
     task_default_queue=settings.celery_queue,
     task_serializer="json",
@@ -27,6 +28,7 @@ celery_app.conf.update(
     broker_transport_options={"visibility_timeout": 300},
     broker_connection_retry_on_startup=True,
 )
+# we have update some parameter it is very used full for when we made celery_app 
 
 _local = threading.local()
 

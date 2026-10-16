@@ -17,6 +17,7 @@ class RedisCache:
         self.ttl = ttl
 
     async def _key(self, namespace: str, parts):
+        print("namespace",namespace)
         version = await get_redis().get(f"folio:cache-version:{namespace}")
         suffix = ":".join(str(p) for p in parts)
         return f"folio:cache:{namespace}:{int(version or 0)}:{suffix}"

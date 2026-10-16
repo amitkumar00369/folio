@@ -44,6 +44,7 @@ class FolioService:
 
     async def lock_folio(self, folio: Folio, bump: bool = False):
         new_version = folio.version + 1 if bump else folio.version
+        
         result = await self.db.execute(
             update(Folio)
             .where(Folio.id == folio.id, Folio.version == folio.version)

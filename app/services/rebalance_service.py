@@ -274,10 +274,12 @@ class RebalanceProcessor:
     async def finish_job(self, job_id: str):
         async with self.session_factory() as db:
             job = await db.get(RebalanceJob, job_id)
+            print("console when we reflect rebalnce", )
             if job is None or job.status in TERMINAL:
                 await db.commit()
                 return False
             counts = await task_counts(db, job_id)
+            print("counts", counts)
             if counts[TaskStatus.PENDING]:
                 await db.commit()
                 return False
