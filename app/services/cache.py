@@ -26,6 +26,7 @@ class RedisCache:
         try:
             key = await self._key(namespace, parts)
             raw = await get_redis().get(key)
+            print("raw", key)
         except RedisError as exc:
             log.warning("cache read failed, using db: %s", exc)
             return await loader()
