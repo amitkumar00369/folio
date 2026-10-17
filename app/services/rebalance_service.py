@@ -256,6 +256,7 @@ class RebalanceProcessor:
         held = sub.position_for(job.outgoing_ticker)
         if held and job.outgoing_ticker not in current:
             expected = job.outgoing_base_quantity * sub.multiplier
+            print("odered modified ",expected)
             if held.quantity != expected:
                 log.warning(
                     "%s holds %s %s, expected %s; selling what is held",

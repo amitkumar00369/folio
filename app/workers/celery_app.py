@@ -78,7 +78,7 @@ def process_job(job_id: str):
 @celery_app.task(name="rebalance.process_subscriber", bind=True, max_retries=300)
 def process_subscriber(self, job_id: str, task_id: int):
     try:
-        print("process_subscriber","*"*50, job_id)
+        print("process_subscriber","*"*50, job_id,task_id)
 
         done = run_async(processor().process_task(task_id))
     except ConflictError:
