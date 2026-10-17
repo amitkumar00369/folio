@@ -64,6 +64,8 @@ def resume_unfinished_jobs(**_):
 
 @celery_app.task(name="rebalance.process_job")
 def process_job(job_id: str):
+    print("*"*50, job_id)
+
     task_ids = run_async(processor().start_job(job_id))
     log.info("rebalance %s: fanning out %s subscribers", job_id, len(task_ids))
     if not task_ids:
@@ -76,6 +78,8 @@ def process_job(job_id: str):
 @celery_app.task(name="rebalance.process_subscriber", bind=True, max_retries=300)
 def process_subscriber(self, job_id: str, task_id: int):
     try:
+        print("process_subscriber","*"*50, job_id)
+
         done = run_async(processor().process_task(task_id))
     except ConflictError:
         raise self.retry(countdown=2)
@@ -87,6 +91,7 @@ def process_subscriber(self, job_id: str, task_id: int):
 class CeleryDispatcher:
     async def start(self):
         for job_id in await processor().pending_job_ids():
+            print("start","*"*50, job_id)
             log.info("re-publishing unfinished rebalance job %s", job_id)
             await self.enqueue(job_id)
 
@@ -94,4 +99,6 @@ class CeleryDispatcher:
         pass
 
     async def enqueue(self, job_id: str):
+        print("enqueu","*"*50, job_id)
+
         await asyncio.to_thread(process_job.delay, job_id)

@@ -167,6 +167,8 @@ class RebalanceProcessor:
 
     async def start_job(self, job_id: str):
         async with self.session_factory() as db:
+            print("*"*50, job_id)
+
             job = await db.get(RebalanceJob, job_id)
             if job is None:
                 log.warning("rebalance job %s vanished", job_id)
@@ -186,6 +188,8 @@ class RebalanceProcessor:
 
     async def process_task(self, task_id: int, wait_for_older: bool = True):
         async with self.session_factory() as db:
+            print("process_subscriber working","*"*50, task_id)
+
             subscription_id = await db.scalar(
                 select(RebalanceTask.subscription_id).where(
                     RebalanceTask.id == task_id, RebalanceTask.status == TaskStatus.PENDING
@@ -274,7 +278,7 @@ class RebalanceProcessor:
     async def finish_job(self, job_id: str):
         async with self.session_factory() as db:
             job = await db.get(RebalanceJob, job_id)
-            print("console when we reflect rebalnce", )
+            print("console when we reflect rebalnce",job_id )
             if job is None or job.status in TERMINAL:
                 await db.commit()
                 return False

@@ -29,6 +29,7 @@ class JobQueue(Protocol):
 
 
 def get_worker(request: Request):
+    print("ererrerer request.app.state.rebalance_worker",request.app.state.rebalance_worker)
     return request.app.state.rebalance_worker
 
 
